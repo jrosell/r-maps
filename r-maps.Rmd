@@ -1,0 +1,42 @@
+---
+title: "R Maps"
+output: html_notebook
+---
+
+We install the environment and                    
+```{r}
+renv::restore(prompt = FALSE)
+if(!require(tidyverse)){
+  # sudo apt-get install libgdal-dev libv8-dev libprotobuf-dev protobuf-compiler libjq-dev
+  install.packages(c("devtools","tidyverse","sf","geojsonio"))
+  devtools::install_github("crazycapivara/cartovl")
+  renv::snapshot(prompt = FALSE)
+}
+library(tidyverse)
+library(sf)
+library(geojsonio)
+library(cartovl)
+```
+
+
+#  Cartovl Map for R example
+
+```{r}
+
+nc_geojson <- system.file("shape/nc.shp", package = "sf") %>%
+  st_read() %>%
+  geojson_json()
+
+viz_def <- list(
+  "color: ramp($AREA, [midnightblue, gold])"
+)
+
+map <- cartovl() %>%
+  set_view(-79.89042, 35.23582, 6) %>%
+  add_layer(nc_geojson, viz_def)
+
+if (interactive()) map
+```
+
+
+

@@ -1,6 +1,9 @@
 ---
 title: "R Maps"
-output: html_notebook
+output:
+  html_document:
+    toc: yes
+  html_notebook: default
 ---
 
 We install the environment and                    
@@ -8,7 +11,7 @@ We install the environment and
 renv::restore(prompt = FALSE)
 if(!require(tidyverse)){
   # sudo apt-get install libgdal-dev libv8-dev libprotobuf-dev protobuf-compiler libjq-dev
-  install.packages(c("devtools","tidyverse","sf","geojsonio"))
+  install.packages(c("devtools","tidyverse","sf","geojsonio", "spData", "data.table"))
   devtools::install_github("crazycapivara/cartovl")
   renv::snapshot(prompt = FALSE)
 }
@@ -39,4 +42,254 @@ if (interactive()) map
 ```
 
 
+# getting started
+
+```{r}
+
+sample_data <- geojson_json(quakes)
+
+viz_def <- list(
+  "color: green",
+  "width: 5",
+  "filter: $mag > 5.2",
+  "@popup: $mag"
+)
+
+map <- cartovl() %>%
+  set_view(176.9, -24.655, 2) %>%
+  add_layer(sample_data, viz_def, popup = TRUE) %>%
+  add_box("<h1>quakes</h1>")
+
+if (interactive()) map
+```
+
+# carto-dataset
+
+```{r}
+viz_def <- list(
+  "width: 7",
+  "color: ramp($weather,[darkorange,darkviolet,darkturquoise])",
+  "strokeWidth: 0.2",
+  "strokeColor: black"
+)
+
+map <- cartovl() %>%
+  set_view(-96, 41, 4) %>%
+  add_box("<b>Rail Accidents by Weather</b>") %>%
+  set_default_auth() %>%
+  add_dataset_layer("railroad_accidents", viz_def, legend = list(position = "bottom-left"))
+
+if (interactive()) map
+```
+# every-person-in-manhatten
+
+```{r}
+
+
+data_url <- paste0(
+  "https://raw.githubusercontent.com/",
+  "uber-common/deck.gl-data/",
+  "master/examples/scatterplot/manhattan.json"
+)
+
+persons <- data_url %>%
+  jsonlite::read_json(simplifyVector = TRUE) %>%
+  as_tibble() %>%
+  set_names(c("lng", "lat", "sex")) %>%
+  dplyr::mutate(sex = ifelse(sex == 1, "male", "female"))
+
+# persons$sex <- ifelse(persons$sex == 1, "m", "f")
+
+# persons_geojson <- geojsonio::geojson_json(persons)
+
+cartovl() %>%
+  set_view(-73.985130, 40.758896, 11) %>%
+  add_control() %>%
+  add_layer(
+    # data = persons_geojson,
+    data = persons,
+    viz_def = list("color: ramp(buckets($sex, ['male', 'female']), [red, blue])"),
+    legend = TRUE
+  )
+```
+
+# external-data-source
+```{r}
+
+source <- "https://libs.cartocdn.com/carto-vl/assets/stations.geojson"
+
+map <- cartovl() %>%
+  set_view(-77.04, 38.89, 9) %>%
+  add_external_geojson_layer(source, list("@popup: $name"), popup = TRUE)
+
+if (interactive()) map
+```
+
+# layers_polygon
+```{r}
+nc_geojson <- system.file("shape/nc.shp", package = "sf") %>%
+  st_read() %>%
+  geojson_json()
+
+viz_def <- list(
+  "color: ramp($AREA, [midnightblue, gold])",
+  "filter: $AREA > 0.16",
+  "@name: $NAME"
+)
+
+viz_def2 <- list(
+  "color: ramp(globalQuantiles($AREA, 3), [midnightblue, gold])",
+  "@name: $NAME"
+)
+
+map <- cartovl() %>%
+  add_source(nc_geojson, "nc") %>%
+  add_control("NavigationControl", showCompass = FALSE) %>%
+  set_view(-79.89042, 35.23582, 6) %>%
+  add_layer("nc", viz_def2, popup = TRUE, legend = TRUE)
+  # add_layer(nc_geojson, viz_def, popup = TRUE)
+
+if (interactive()) map
+```
+
+# mapbox-layer_polygo
+```{r}
+
+polygon_style <- list(
+  type = "fill",
+  paint = list(
+    "fill-color" = "white",
+    "fill-outline-color" = "red"
+  ),
+  filter = list(">", "AREA", 0.2)
+)
+
+cartovl() %>%
+  set_view(-79.89042, 35.23582, 6) %>%
+  add_source(nc_geojson, "nc") %>%
+  add_mapbox_layer("nc", polygon_style)
+```
+
+
+# mapbox-layer_text
+```{r}
+
+
+data_geojson <- geojsonio::geojson_json(quakes)
+
+text_style <- list(
+  type = "symbol",
+  layout = list(
+    "text-field" = "{mag}"
+  ),
+  paint = list(
+    "text-color" = "white"
+  )
+)
+
+map <- cartovl() %>%
+  set_view(176.9, -24.655, 2) %>%
+  # add_source(data_geojson, "quakes") %>%
+  add_source(quakes, "quakes", latitude = "lat", longitude = "long") %>%
+  # add_mapbox_layer("quakes", text_style) %>%
+  add_mapbox_layer("quakes", mapbox_text_style("mag")) %>%
+  add_control()
+
+if (interactive()) map
+```
+
+# multiple-layers
+```{r}
+
+text_style <- list(
+  type = "symbol",
+  layout = list(
+    "text-field" = "{NAME}"
+  ),
+  paint = list(
+    "text-color" = "white"
+  )
+)
+
+data_url <- "https://raw.githubusercontent.com/uber-common/deck.gl-data/master/examples/highway/roads.json"
+
+us_states <- geojsonio::geojson_json(spData::us_states)
+
+map <- cartovl() %>%
+  add_control() %>%
+  add_source(us_states, "us_states") %>%
+  set_view(-100, 38, 3) %>%
+  add_layer(
+    "us_states",
+    list(
+      "color: opacity(ramp($NAME, vivid), 0.4)"
+    ),
+    id = "state-polygons"
+  ) %>%
+  add_external_geojson_layer(
+    data_url,
+    list(
+      "color: ramp($state, vivid)",
+      "width: 5",
+      "@popup: $state"
+    ),
+    id = "roads",
+    popup = TRUE
+  ) %>%
+  add_mapbox_layer(
+    "us_states", text_style, id = "labels"
+  )
+
+if (interactive()) map
+```
+
+
+# road-safety-uk
+```{r}
+
+data_url <- paste0(
+  "https://raw.githubusercontent.com/",
+  "uber-common/deck.gl-data/",
+  "master/examples/3d-heatmap/heatmap-data.csv"
+)
+sample_data <- data.table::fread(data_url) %>%
+  na.omit()
+
+viz_def <- list(
+  "width: 5"
+)
+
+map <- cartovl() %>%
+  set_view(-1.4157267858730052, 52.232395363869415, 4) %>%
+  add_layer(sample_data, viz_def)
+
+if (interactive()) map
+```
+
+# vancouver-blocks
+```{r}
+
+data_url <- paste0(
+  "https://raw.githubusercontent.com/uber-common/deck.gl-data/",
+  "master/examples/geojson/vancouver-blocks.json"
+)
+
+blocks <- st_read(data_url) %>%
+  geojson_json()
+
+viz_def <- list(
+  "color: ramp($growth, [red, green, yellow])"
+)
+
+map <- cartovl() %>%
+  set_view(latitude = 49.254, longitude = -123.13, zoom = 11) %>%
+  add_layer(blocks, viz_def)
+
+map <- cartovl() %>%
+  set_view(latitude = 49.254, longitude = -123.13, zoom = 11) %>%
+  add_external_geojson_layer(data_url, viz_def)
+
+
+if (interactive()) map
+```
 
